@@ -1,8 +1,9 @@
 window.addEventListener('load', function () {
     // --- Configuration ---
-    // Regular Expressions for validating the barcode formats
-    const patientIdRegex = /^[A-Z]\d{6,7}[A-Z0-9]?$/i; // i flag for case-insensitive
-    const accessionRegex = /^PWH\d{9}[A-Z]$/i; // i flag for case-insensitive
+    // Regular Expressions for validating the barcode formats.
+    // The 'i' flag makes matching case-insensitive.
+    const patientIdRegex = /^[A-Z]\d{6,7}[A-Z0-9]?$/i;
+    const accessionRegex = /^PWH\d{9}[A-Z]$/i;
 
     // --- HTML Element References ---
     const videoElement = document.getElementById('video');
@@ -11,7 +12,7 @@ window.addEventListener('load', function () {
     const accessionNumberElement = document.getElementById('accession-number');
 
     // --- Initialize Barcode Reader ---
-    // We specify a time hint to help the library perform faster.
+    // We give the library a "hint" to only look for common 1D/2D barcode formats to improve performance.
     const hints = new Map();
     const formats = [
         ZXing.BarcodeFormat.CODE_128,
@@ -23,82 +24,78 @@ window.addEventListener('load', function () {
     const codeReader = new ZXing.BrowserMultiFormatReader(hints);
 
     // --- Start Camera ---
+    // This function is called when the page loads.
     function startCamera() {
-        // Request access to the rear camera of the phone
+        // Request access to the 'environment' (rear) camera.
         navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'environment' }
         }).then(stream => {
+            // If permission is granted, set the video source to the camera stream.
             videoElement.srcObject = stream;
             videoElement.play();
         }).catch(err => {
-            console.error("Camera Error:", err);
+            // Log the full error to the console for debugging.
+            console.error("Camera Access Error:", err);
             alert("Could not access camera. Please grant permission and ensure you are on a secure (HTTPS) connection.");
         });
     }
 
     // --- Handle Scan Button Click ---
+    // This is the corrected logic.
     scanButton.addEventListener('click', async () => {
-        resetResults();
-        try {
-            // This captures the current video frame and attempts to decode barcodes from it.
-            // The image data exists only in memory and is never stored as a file.
-            const results = await codeReader.decodeFromVideoDevice(undefined, videoElement, (result, err) => {
-                 // This callback is for continuous scanning, which we stop after first success.
-                 if (result) {
-                    codeReader.stopContinuousDecode();
-                    processScanResults(result.getText());
-                }
-            });
-            // We use `decodeOnceFromVideoElement` for a single-shot scan on button press.
-            const result = await codeReader.decodeOnceFromVideoElement(videoElement);
+        resetResults(); // Clear previous results from the UI.
 
-            // Process Multiple Barcodes found in the single frame
-            if (result) {
-                 const barcodes = [result]; // Start with the first result
-                 try {
-                    // Try to decode more from the same frame
-                    const moreResults = await codeReader.decodeMultipleFromVideoElement(videoElement);
-                    if (moreResults && moreResults.length > 0) {
-                        barcodes.push(...moreResults);
-                    }
-                 } catch (e) { /* It's okay if no more are found */ }
-                 
-                 processAllBarcodes(barcodes);
+        try {
+            // The core of our logic: Attempt to decode all barcodes from the current video frame.
+            // The image data exists only in memory and is never stored.
+            const results = await codeReader.decodeMultipleFromVideoElement(videoElement);
+            
+            if (results && results.length > 0) {
+                processAllBarcodes(results);
+            } else {
+                // This handles the case where the scan is successful but no barcodes are detected.
+                updateResultUI(patientIdElement, 'Not Found', false);
+                updateResultUI(accessionNumberElement, 'Not Found', false);
             }
 
         } catch (error) {
+            // This 'catch' block handles errors during the decoding process.
             if (error instanceof ZXing.NotFoundException) {
+                // This specific error means no barcodes could be located/read in the frame.
                 alert("No barcode was found. Please position the document clearly in the camera view.");
             } else {
-                console.error("Scanning Error:", error);
-                alert("An error occurred during scanning.");
+                // For any other unexpected errors, log the details to the console for debugging.
+                console.error("An unexpected scanning error occurred:", error);
+                alert("An error occurred during scanning. Check the browser console for details.");
             }
         }
     });
 
     // --- Process All Found Barcodes ---
-    function processAllBarcodes(barcodes) {
+    function processAllBarcodes(barcodeResults) {
         let patientIdFound = false;
         let accessionFound = false;
         
-        // Use a Set to avoid processing duplicate barcode reads from the same frame
-        const uniqueBarcodeTexts = new Set(barcodes.map(b => b.getText()));
+        // Use a Set to avoid processing duplicate barcode values if the library reads the same one multiple times.
+        const uniqueBarcodeTexts = new Set(barcodeResults.map(result => result.getText()));
 
         uniqueBarcodeTexts.forEach(text => {
-            console.log(`Found barcode: ${text}`);
+            const upperCaseText = text.toUpperCase(); // Standardize to uppercase for reliable matching.
+            console.log(`Found and processing barcode: ${upperCaseText}`);
 
             // Test against Patient ID format
-            if (patientIdRegex.test(text)) {
-                updateResultUI(patientIdElement, text, true);
+            if (patientIdRegex.test(upperCaseText)) {
+                updateResultUI(patientIdElement, upperCaseText, true);
                 patientIdFound = true;
             }
             // Test against Accession Number format
-            else if (accessionRegex.test(text)) {
-                updateResultUI(accessionNumberElement, text, true);
+            else if (accessionRegex.test(upperCaseText)) {
+                updateResultUI(accessionNumberElement, upperCaseText, true);
                 accessionFound = true;
             }
         });
 
+        // If after checking all barcodes, a type was not found, update the UI to reflect that.
         if (!patientIdFound) {
             updateResultUI(patientIdElement, 'Not Found / Invalid Format', false);
         }
@@ -108,14 +105,16 @@ window.addEventListener('load', function () {
     }
     
     // --- Helper Functions ---
+    // Resets the UI to its initial state.
     function resetResults() {
         updateResultUI(patientIdElement, '-- Please Scan --', null);
         updateResultUI(accessionNumberElement, '-- Please Scan --', null);
     }
     
+    // Updates a specific part of the UI (Patient ID or Accession #) with the result.
     function updateResultUI(element, text, isValid) {
         element.textContent = text;
-        element.classList.remove('valid', 'invalid');
+        element.classList.remove('valid', 'invalid'); // Reset styling
         if (isValid === true) {
             element.classList.add('valid');
         } else if (isValid === false) {
@@ -124,5 +123,6 @@ window.addEventListener('load', function () {
     }
 
     // --- Application Entry Point ---
+    // Start the camera as soon as the page has finished loading.
     startCamera();
 });
