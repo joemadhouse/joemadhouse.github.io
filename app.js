@@ -4,11 +4,11 @@ window.addEventListener('load', function () {
     const accessionRegex = /^PWH\d{9}[A-Z]$/i;
 
     // --- State Management ---
-    // Use an object to track the found values to prevent them from being overwritten by subsequent scans.
     const foundCodes = {
         patientId: null,
         accessionNumber: null
     };
+    let isContinuousScanActive = false; // Flag to prevent multiple scan initializations
 
     // --- HTML Element References ---
     const videoElement = document.getElementById('video');
@@ -26,98 +26,98 @@ window.addEventListener('load', function () {
 
     // --- Main Logic ---
 
-    // Function to process a set of barcode results (from video or canvas)
+    // Function to process a set of barcode results
     function processAllBarcodes(barcodeResults) {
-        let patientIdFound = false;
-        let accessionFound = false;
-        
+        // ... (This function's internal logic remains the same as before)
         const uniqueBarcodeTexts = new Set(barcodeResults.map(result => result.getText()));
+        let wasPatientIdFoundThisScan = false;
+        let wasAccessionFoundThisScan = false;
 
         uniqueBarcodeTexts.forEach(text => {
             const upperCaseText = text.toUpperCase();
-            console.log(`Found barcode: ${upperCaseText}`);
-
-            // Test and set Patient ID if not already found
             if (patientIdRegex.test(upperCaseText) && !foundCodes.patientId) {
                 foundCodes.patientId = upperCaseText;
                 updateResultUI(patientIdElement, upperCaseText, true);
-                patientIdFound = true;
-            }
-            // Test and set Accession Number if not already found
-            else if (accessionRegex.test(upperCaseText) && !foundCodes.accessionNumber) {
+                wasPatientIdFoundThisScan = true;
+            } else if (accessionRegex.test(upperCaseText) && !foundCodes.accessionNumber) {
                 foundCodes.accessionNumber = upperCaseText;
                 updateResultUI(accessionNumberElement, upperCaseText, true);
-                accessionFound = true;
+                wasAccessionFoundThisScan = true;
             }
         });
 
-        // If both codes are found, we can stop the continuous scan to save battery.
-        if (foundCodes.patientId && foundCodes.accessionNumber) {
-            codeReader.reset(); // Stop the video stream decoding
+        if (foundCodes.patientId && foundCodes.accessionNumber && isContinuousScanActive) {
+            codeReader.reset();
+            isContinuousScanActive = false;
             console.log("Both codes found. Stopping continuous scan.");
         }
-
-        return { patientIdFound, accessionFound };
+        return { patientIdFound: wasPatientIdFoundThisScan, accessionFound: wasAccessionFoundThisScan };
     }
 
     // --- Event Listener for the Button ---
     scanButton.addEventListener('click', async () => {
-        // Freeze Frame: The image data is copied from the video to the hidden canvas.
-        // This creates our "photo" in memory.
+        if (!videoElement.srcObject) {
+            alert("Camera is not active. Please allow camera permissions.");
+            return;
+        }
         canvasElement.width = videoElement.videoWidth;
         canvasElement.height = videoElement.videoHeight;
         canvasContext.drawImage(videoElement, 0, 0, videoElement.videoWidth, videoElement.videoHeight);
         
-        resetResults(); // Reset UI for the new manual scan
+        resetResultsForManualScan();
 
         try {
-            // Scan the static image on the canvas. This is often more reliable.
             const results = await codeReader.decodeFromCanvas(canvasElement);
             if (results && results.length > 0) {
-                console.log(`Manual scan found ${results.length} barcodes.`);
                 const found = processAllBarcodes(results);
-
-                // Provide feedback if one of the codes was still not found
-                if (!found.patientIdFound) {
-                    updateResultUI(patientIdElement, 'Not Found in Frame', false);
-                }
-                if (!found.accessionFound) {
-                    updateResultUI(accessionNumberElement, 'Not Found in Frame', false);
-                }
+                if (!found.patientIdFound) updateResultUI(patientIdElement, 'Not Found in Frame', false);
+                if (!found.accessionFound) updateResultUI(accessionNumberElement, 'Not Found in Frame', false);
             } else {
                  alert("No barcodes could be read from the frozen frame.");
             }
         } catch (error) {
             if (error instanceof ZXing.NotFoundException) {
-                alert("No barcode was found in the frozen frame. Please try again.");
+                alert("No barcode was found in the frozen frame.");
             } else {
-                console.error("An unexpected error occurred during canvas scan:", error);
-                alert("An error occurred during the scan. Check console for details.");
+                console.error("Canvas scan error:", error);
+                alert("An error occurred during the scan.");
             }
         }
     });
 
-    // --- Start Continuous Scanning ---
-    function startContinuousScan() {
+    // --- Application Entry Point ---
+    // This is the new, more robust camera startup sequence.
+    function startCamera() {
+        resetInitialUI();
         navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'environment' }
         }).then(stream => {
             videoElement.srcObject = stream;
-            // The third argument to this function is a callback that runs on every successful scan.
-            codeReader.decodeFromVideoDevice(videoElement, 'video', (result, err) => {
-                if (result) {
-                    // When a barcode is found, process it. We wrap it in an array to reuse our processing function.
-                    console.log("Continuous scan found a barcode.");
-                    processAllBarcodes([result]);
-                }
-                if (err && !(err instanceof ZXing.NotFoundException)) {
-                    // Log errors other than "not found" which is expected.
-                    console.error(err);
+            
+            // **THE CRITICAL FIX IS HERE**
+            // We listen for the 'playing' event. This event only fires when the browser
+            // has successfully started rendering video frames from the stream.
+            videoElement.addEventListener('playing', () => {
+                // Only start the continuous scan once we are SURE the video is playing.
+                if (!isContinuousScanActive) {
+                    console.log("Video is playing. Starting continuous scan.");
+                    isContinuousScanActive = true;
+                    codeReader.decodeFromVideoDevice(videoElement.id, 'video', (result, err) => {
+                        if (result) {
+                            processAllBarcodes([result]);
+                        }
+                        if (err && !(err instanceof ZXing.NotFoundException)) {
+                            console.error("Continuous scan error:", err);
+                        }
+                    });
                 }
             });
-            resetResults(); // Initial UI state
-            updateResultUI(patientIdElement, '-- Scanning... --', null);
-            updateResultUI(accessionNumberElement, '-- Scanning... --', null);
+
+            // We must explicitly call play() on the video element to trigger the stream.
+            // On some browsers (like Safari on iOS), this might only work if inside an event
+            // handler from a user gesture, but getUserMedia often provides an exception.
+            // The 'playing' event listener above will handle success or failure gracefully.
+            videoElement.play().catch(e => console.error("Video play error:", e));
 
         }).catch(err => {
             console.error("Camera Access Error:", err);
@@ -126,11 +126,19 @@ window.addEventListener('load', function () {
     }
 
     // --- Helper Functions ---
-    function resetResults() {
+    function resetInitialUI() {
         foundCodes.patientId = null;
         foundCodes.accessionNumber = null;
-        updateResultUI(patientIdElement, '-- Please Scan --', null);
-        updateResultUI(accessionNumberElement, '-- Please Scan --', null);
+        updateResultUI(patientIdElement, '-- Starting Camera... --', null);
+        updateResultUI(accessionNumberElement, '-- Starting Camera... --', null);
+    }
+
+    function resetResultsForManualScan() {
+        // When scanning manually, we want to clear and re-validate both fields from the new frame.
+        foundCodes.patientId = null;
+        foundCodes.accessionNumber = null;
+        updateResultUI(patientIdElement, '-- Scanning Frame... --', null);
+        updateResultUI(accessionNumberElement, '-- Scanning Frame... --', null);
     }
     
     function updateResultUI(element, text, isValid) {
@@ -143,6 +151,6 @@ window.addEventListener('load', function () {
         }
     }
 
-    // --- Application Entry Point ---
-    startContinuousScan();
+    // --- Start the application ---
+    startCamera();
 });
