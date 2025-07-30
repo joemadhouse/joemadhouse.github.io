@@ -1,156 +1,107 @@
-window.addEventListener('load', function () {
-    // --- Configuration ---
+window.addEventListener('load', () => {
     const patientIdRegex = /^[A-Z]\d{6,7}[A-Z0-9]?$/i;
     const accessionRegex = /^PWH\d{9}[A-Z]$/i;
 
-    // --- State Management ---
-    const foundCodes = {
-        patientId: null,
-        accessionNumber: null
-    };
-    let isContinuousScanActive = false; // Flag to prevent multiple scan initializations
-
-    // --- HTML Element References ---
-    const videoElement = document.getElementById('video');
-    const canvasElement = document.getElementById('frame-canvas');
-    const canvasContext = canvasElement.getContext('2d');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('frame-canvas');
+    const ctx = canvas.getContext('2d');
     const scanButton = document.getElementById('scan-button');
-    const patientIdElement = document.getElementById('patient-id');
-    const accessionNumberElement = document.getElementById('accession-number');
+    const patientIdElem = document.getElementById('patient-id');
+    const accessionElem = document.getElementById('accession-number');
 
-    // --- Initialize Barcode Reader ---
+    // Initialize ZXing code reader with desired barcode formats
     const hints = new Map();
     const formats = [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.QR_CODE];
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
     const codeReader = new ZXing.BrowserMultiFormatReader(hints);
 
-    // --- Main Logic ---
+    // Open camera and show video stream, NO scanning here
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = stream;
+            await video.play();
 
-    // Function to process a set of barcode results
-    function processAllBarcodes(barcodeResults) {
-        // ... (This function's internal logic remains the same as before)
-        const uniqueBarcodeTexts = new Set(barcodeResults.map(result => result.getText()));
-        let wasPatientIdFoundThisScan = false;
-        let wasAccessionFoundThisScan = false;
+            updateUI('-- Ready to Scan --', '-- Ready to Scan --');
 
-        uniqueBarcodeTexts.forEach(text => {
-            const upperCaseText = text.toUpperCase();
-            if (patientIdRegex.test(upperCaseText) && !foundCodes.patientId) {
-                foundCodes.patientId = upperCaseText;
-                updateResultUI(patientIdElement, upperCaseText, true);
-                wasPatientIdFoundThisScan = true;
-            } else if (accessionRegex.test(upperCaseText) && !foundCodes.accessionNumber) {
-                foundCodes.accessionNumber = upperCaseText;
-                updateResultUI(accessionNumberElement, upperCaseText, true);
-                wasAccessionFoundThisScan = true;
-            }
-        });
-
-        if (foundCodes.patientId && foundCodes.accessionNumber && isContinuousScanActive) {
-            codeReader.reset();
-            isContinuousScanActive = false;
-            console.log("Both codes found. Stopping continuous scan.");
+        } catch (err) {
+            console.error('Camera error:', err);
+            alert('Failed to access camera. Make sure to allow permissions.');
         }
-        return { patientIdFound: wasPatientIdFoundThisScan, accessionFound: wasAccessionFoundThisScan };
     }
 
-    // --- Event Listener for the Button ---
+    // When user clicks "Scan" button, capture current frame and scan barcodes
     scanButton.addEventListener('click', async () => {
-        if (!videoElement.srcObject) {
-            alert("Camera is not active. Please allow camera permissions.");
+        if (!video.videoWidth || !video.videoHeight) {
+            alert('Video not ready yet. Please wait.');
             return;
         }
-        canvasElement.width = videoElement.videoWidth;
-        canvasElement.height = videoElement.videoHeight;
-        canvasContext.drawImage(videoElement, 0, 0, videoElement.videoWidth, videoElement.videoHeight);
-        
-        resetResultsForManualScan();
+
+        // Set canvas size to video dimensions
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        // Draw current video frame to canvas (freeze frame)
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        resetUI();
 
         try {
-            const results = await codeReader.decodeFromCanvas(canvasElement);
-            if (results && results.length > 0) {
-                const found = processAllBarcodes(results);
-                if (!found.patientIdFound) updateResultUI(patientIdElement, 'Not Found in Frame', false);
-                if (!found.accessionFound) updateResultUI(accessionNumberElement, 'Not Found in Frame', false);
-            } else {
-                 alert("No barcodes could be read from the frozen frame.");
+            // Scan barcodes from the static canvas image
+            const results = await codeReader.decodeFromCanvas(canvas);
+
+            if (!results) {
+                alert('No barcode found in the image. Please try again.');
+                updateUI('Not Found', 'Not Found');
+                return;
             }
-        } catch (error) {
-            if (error instanceof ZXing.NotFoundException) {
-                alert("No barcode was found in the frozen frame.");
+
+            // Helper function to process single or multiple barcodes uniformly
+            const barcodeTexts = Array.isArray(results) ? results.map(r => r.getText()) : [results.getText()];
+
+            let patientId = null;
+            let accession = null;
+
+            // Validate barcodes and assign values accordingly
+            for (const textRaw of barcodeTexts) {
+                const text = textRaw.toUpperCase();
+                if (patientIdRegex.test(text)) patientId = text;
+                else if (accessionRegex.test(text)) accession = text;
+            }
+
+            if (patientId) updateElement(patientIdElem, patientId, true);
+            else updateElement(patientIdElem, 'Not Found / Invalid Format', false);
+
+            if (accession) updateElement(accessionElem, accession, true);
+            else updateElement(accessionElem, 'Not Found / Invalid Format', false);
+
+        } catch (err) {
+            if (err instanceof ZXing.NotFoundException) {
+                alert('No barcode detected. Please adjust and retry.');
+                updateUI('Not Found', 'Not Found');
             } else {
-                console.error("Canvas scan error:", error);
-                alert("An error occurred during the scan.");
+                console.error('Scan error:', err);
+                alert('Error during scanning. Check console for details.');
             }
         }
     });
 
-    // --- Application Entry Point ---
-    // This is the new, more robust camera startup sequence.
-    function startCamera() {
-        resetInitialUI();
-        navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' }
-        }).then(stream => {
-            videoElement.srcObject = stream;
-            
-            // **THE CRITICAL FIX IS HERE**
-            // We listen for the 'playing' event. This event only fires when the browser
-            // has successfully started rendering video frames from the stream.
-            videoElement.addEventListener('playing', () => {
-                // Only start the continuous scan once we are SURE the video is playing.
-                if (!isContinuousScanActive) {
-                    console.log("Video is playing. Starting continuous scan.");
-                    isContinuousScanActive = true;
-                    codeReader.decodeFromVideoDevice(videoElement.id, 'video', (result, err) => {
-                        if (result) {
-                            processAllBarcodes([result]);
-                        }
-                        if (err && !(err instanceof ZXing.NotFoundException)) {
-                            console.error("Continuous scan error:", err);
-                        }
-                    });
-                }
-            });
-
-            // We must explicitly call play() on the video element to trigger the stream.
-            // On some browsers (like Safari on iOS), this might only work if inside an event
-            // handler from a user gesture, but getUserMedia often provides an exception.
-            // The 'playing' event listener above will handle success or failure gracefully.
-            videoElement.play().catch(e => console.error("Video play error:", e));
-
-        }).catch(err => {
-            console.error("Camera Access Error:", err);
-            alert("Could not access camera. Please grant permission and ensure you are on a secure (HTTPS) connection.");
-        });
+    function resetUI() {
+        updateElement(patientIdElem, '-- Scanning --', null);
+        updateElement(accessionElem, '-- Scanning --', null);
     }
 
-    // --- Helper Functions ---
-    function resetInitialUI() {
-        foundCodes.patientId = null;
-        foundCodes.accessionNumber = null;
-        updateResultUI(patientIdElement, '-- Starting Camera... --', null);
-        updateResultUI(accessionNumberElement, '-- Starting Camera... --', null);
+    function updateUI(patientText, accessionText) {
+        updateElement(patientIdElem, patientText, null);
+        updateElement(accessionElem, accessionText, null);
     }
 
-    function resetResultsForManualScan() {
-        // When scanning manually, we want to clear and re-validate both fields from the new frame.
-        foundCodes.patientId = null;
-        foundCodes.accessionNumber = null;
-        updateResultUI(patientIdElement, '-- Scanning Frame... --', null);
-        updateResultUI(accessionNumberElement, '-- Scanning Frame... --', null);
-    }
-    
-    function updateResultUI(element, text, isValid) {
-        element.textContent = text;
-        element.classList.remove('valid', 'invalid');
-        if (isValid === true) {
-            element.classList.add('valid');
-        } else if (isValid === false) {
-            element.classList.add('invalid');
-        }
+    function updateElement(elem, text, isValid) {
+        elem.textContent = text;
+        elem.classList.remove('valid', 'invalid');
+        if (isValid === true) elem.classList.add('valid');
+        else if (isValid === false) elem.classList.add('invalid');
     }
 
-    // --- Start the application ---
     startCamera();
 });
