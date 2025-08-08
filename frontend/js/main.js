@@ -8,11 +8,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const base64Image = captureFrame();
     updateUI('📤 Uploading image...', '');
 
-    fetch('http://localhost:5000/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: base64Image })
-    })
+    fetch('https://monkeyjoe.ddns.net/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64Image })
+          })
       .then(res => res.json())
       .then(data => {
         if (data.patient_id && data.accession_number) {
