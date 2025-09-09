@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>7×5 日曆（前端版）</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="banner">
+    <span id="welcomeHeader">檢查登入中…</span>
+    <button id="logoutBtn" class="logout">登出</button>
+  </header>
+
+  <div class="controls">
+    <button id="prev">← 上一月</button>
+
+    <select id="month">
+      <option value="0">Jan</option><option value="1">Feb</option><option value="2">Mar</option>
+      <option value="3">Apr</option><option value="4">May</option><option value="5">Jun</option>
+      <option value="6">Jul</option><option value="7">Aug</option><option value="8">Sep</option>
+      <option value="9">Oct</option><option value="10">Nov</option><option value="11">Dec</option>
+    </select>
+
+    <select id="year"></select>
+
+    <button id="next">下一月 →</button>
+    <button id="today">今天</button>
+  </div>
+
+  <p class="tip">7×5 = 週日～週六 × 5 週；僅顯示本月的日期，其他留白。點格子會顯示日期。</p>
+
+  <table id="cal" border="1" cellpadding="8"></table>
+
+  <script src="app.js"></script>
+</body>
+</html>

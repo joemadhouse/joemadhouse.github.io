@@ -1,5 +1,0 @@
-flask
-opencv-python
-pyzbar
-numpy
-Pillow
