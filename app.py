@@ -14,7 +14,7 @@ def get_user_data():
     users = {}
     password = None
     try:
-        with open('users.csv', mode='r', encoding='utf-8') as infile:
+        with open('users.csv', mode='r', encoding='utf-8-sig') as infile:
             reader = csv.reader(infile)
             header = next(reader)
             
@@ -41,7 +41,7 @@ def get_user_data():
 def get_cleaning_schedule():
     """讀取 cleaning.csv 的清潔計畫"""
     schedule = []
-    with open('cleaning.csv', mode='r', encoding='utf-8') as infile:
+    with open('cleaning.csv', mode='r', encoding='utf-8-sig') as infile:
         reader = csv.DictReader(infile)
         for row in reader:
             schedule.append(row)
@@ -90,7 +90,7 @@ def get_or_create_daily_log(date_str):
     # 讀取現有日誌到記憶體
     all_logs = []
     if os.path.exists(log_filepath):
-        with open(log_filepath, 'r', encoding='utf-8', newline='') as f:
+        with open(log_filepath, 'r', encoding='utf-8-sig', newline='') as f:
             reader = csv.DictReader(f)
             all_logs = list(reader)
 
@@ -119,7 +119,7 @@ def get_or_create_daily_log(date_str):
         if new_tasks:
             all_logs.extend(new_tasks)
             # 將新任務寫回檔案
-            with open(log_filepath, 'w', encoding='utf-8', newline='') as f:
+            with open(log_filepath, 'w', encoding='utf-8-sig', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=log_header)
                 writer.writeheader()
                 writer.writerows(all_logs)
@@ -196,7 +196,7 @@ def task_list(date_str):
         
         all_logs = []
         if os.path.exists(log_filepath):
-            with open(log_filepath, 'r', encoding='utf-8', newline='') as f:
+            with open(log_filepath, 'r', encoding='utf-8-sig', newline='') as f:
                 reader = csv.DictReader(f)
                 all_logs = list(reader)
         
@@ -209,7 +209,7 @@ def task_list(date_str):
         
         # 寫回整個檔案
         log_header = ['date', 'location_code', 'location_name', 'team', 'is_completed', 'completed_by', 'completion_time', 'is_verified', 'verified_by']
-        with open(log_filepath, 'w', encoding='utf-8', newline='') as f:
+        with open(log_filepath, 'w', encoding='utf-8-sig', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=log_header)
             writer.writeheader()
             writer.writerows(all_logs)
