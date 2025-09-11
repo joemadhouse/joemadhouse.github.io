@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>任務列表 - {{ date }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .task-container {
+            width: 90%;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+        }
+        .task-header a {
+            text-decoration: none;
+            background: #6c757d;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+        }
+        .task-list { list-style: none; padding: 0; }
+        .task-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .task-item:last-child { border-bottom: none; }
+        .task-item.completed {
+            background-color: #e9f5e9;
+            color: #555;
+            text-decoration: line-through;
+        }
+        .task-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 1rem;
+        }
+        .task-info { flex-grow: 1; }
+        .task-info span {
+            display: block;
+            font-size: 0.85rem;
+            color: #666;
+        }
+        .submit-btn {
+            display: block;
+            width: 100%;
+            padding: 1rem;
+            margin-top: 2rem;
+            font-size: 1.2rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .submit-btn:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="task-container">
+        <div class="task-header">
+            <h1>任務列表 ({{ date }})</h1>
+            <a href="{{ url_for('calendar') }}">返回日曆</a>
+        </div>
+        <form id="task-form" method="post">
+            <ul class="task-list">
+                {% for task in tasks %}
+                <li class="task-item {% if task.is_completed == '1' %}completed{% endif %}">
+                    <input type="checkbox" name="completed_tasks" value="{{ task.location_code }}" 
+                           {% if task.is_completed == '1' %}checked disabled{% endif %}>
+                    <div class="task-info">
+                        <strong>{{ task.location_name }} ({{ task.team }})</strong>
+                        {% if task.is_completed == '1' %}
+                        <span>由 {{ task.completed_by }} 於 {{ task.completion_time }} 完成</span>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            <button type="submit" class="submit-btn">提交已完成的任務</button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('task-form').addEventListener('submit', function(e) {
+            if (!confirm('您確定要提交嗎？提交後將無法修改。')) {
+                e.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>

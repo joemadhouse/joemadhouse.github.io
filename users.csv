@@ -1,0 +1,6 @@
+userid,permission,password
+inspector_A,1,supersecret
+cleaner_B,0,
+cleaner_C,0,
+inspector_D,1,
+cleaner_E,0,

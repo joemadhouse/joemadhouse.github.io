@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body data-permission="{{ user_permission }}">
+    <div class="user-info-header">
+        <span>目前使用者: <strong>{{ session.userid }}</strong> ({{ '檢查員' if session.permission == 1 else '清潔工' }})</span>
+        <a href="{{ url_for('logout') }}">登出</a>
+    </div>
+    <div class="calendar">
+        <div class="calendar-header">
+            <button id="prev-month-btn">&lt;</button>
+            <select id="year-select"></select>
+            <select id="month-select"></select>
+            <button id="next-month-btn">&gt;</button>
+            <button id="today-btn">今天</button>
+        </div>
+        <div class="grid">
+            <!-- Buttons for each day will be generated here -->
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
